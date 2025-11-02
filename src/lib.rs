@@ -12,6 +12,11 @@ pub fn match_pattern(patterns: &[&str], paths: &[&str]) -> bool {
         .map(|p| &p[1..]) // Remove the '!' prefix
         .collect();
 
+    // Early exit: only negation patterns (not valid GitHub Actions usage, but handle gracefully)
+    if positive_patterns.is_empty() {
+        return false;
+    }
+
     // Fast path: no negations
     if negative_patterns.is_empty() {
         let parsed_positive: Vec<Pattern> = positive_patterns.iter().map(|p| parse_pattern(p)).collect();
