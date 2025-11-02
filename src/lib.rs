@@ -42,7 +42,7 @@ pub fn match_pattern(patterns: &[&str], paths: &[&str]) -> bool {
             parsed_negative.iter().any(|pattern| match_segments(&pattern.segments, &path_segments, 0, 0));
 
         // Include path only if it has positive match AND no negative match
-        has_positive_match && !has_negative_match
+        !has_negative_match
     })
 }
 
