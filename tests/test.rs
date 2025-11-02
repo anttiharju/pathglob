@@ -63,6 +63,18 @@ fn test_docs_directory_pattern() {
     assert_glob_match("docs/*", "docs", false); // directory itself, not files within
 }
 
+#[test]
+fn test_docs_recursive_pattern() {
+    // Test docs/** pattern - matches any files in docs directory and its subdirectories
+    assert_glob_match("docs/**", "docs/README.md", true);
+    assert_glob_match("docs/**", "docs/mona/octocat.txt", true);
+    assert_glob_match("docs/**", "docs/nested/deeply/file.txt", true);
+    assert_glob_match("docs/**", "docs/guide.md", true);
+    assert_glob_match("docs/**", "README.md", false); // not in docs directory
+    assert_glob_match("docs/**", "src/docs/file.txt", false); // docs not at root
+    assert_glob_match("docs/**", "other/docs/file.txt", false); // docs not at root
+}
+
 fn assert_glob_match(pattern: &str, path: &str, expected: bool) {
     let matches = match_pattern(pattern, path);
 
