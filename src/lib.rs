@@ -22,25 +22,24 @@ pub fn match_pattern(patterns: &[&str], paths: &[&str]) -> bool {
         });
     }
 
-    // Slow path: with negations
+    // Slow path: with negations - pre-parse all patterns
+    let parsed_positive: Vec<Pattern> = positive_patterns.iter().map(|p| parse_pattern(p)).collect();
+    let parsed_negative: Vec<Pattern> = negative_patterns.iter().map(|p| parse_pattern(p)).collect();
+
     paths.iter().any(|path| {
         let path_segments = if path.is_empty() { vec![] } else { path.split('/').collect() };
 
         // Check if any positive pattern matches
-        let has_positive_match = positive_patterns.iter().any(|pattern| {
-            let parsed_pattern = parse_pattern(pattern);
-            match_segments(&parsed_pattern.segments, &path_segments, 0, 0)
-        });
+        let has_positive_match =
+            parsed_positive.iter().any(|pattern| match_segments(&pattern.segments, &path_segments, 0, 0));
 
         if !has_positive_match {
             return false;
         }
 
         // Check if any negative pattern matches (excludes the path)
-        let has_negative_match = negative_patterns.iter().any(|pattern| {
-            let parsed_pattern = parse_pattern(pattern);
-            match_segments(&parsed_pattern.segments, &path_segments, 0, 0)
-        });
+        let has_negative_match =
+            parsed_negative.iter().any(|pattern| match_segments(&pattern.segments, &path_segments, 0, 0));
 
         // Include path only if it has positive match AND no negative match
         has_positive_match && !has_negative_match
