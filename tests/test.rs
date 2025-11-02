@@ -161,6 +161,18 @@ fn test_migrate_prefix_pattern() {
     assert_glob_match("**/migrate-*.sql", "db/migrate-v1.sql.backup", false); // extra suffix after .sql
 }
 
+#[test]
+fn test_negation_pattern() {
+    // Test *.md with !README.md - matches .md files except README.md
+    assert_glob_match(&["*.md", "!README.md"], "hello.md", true);
+    assert_glob_match(&["*.md", "!README.md"], "guide.md", true);
+    assert_glob_match(&["*.md", "!README.md"], "file.md", true);
+    assert_glob_match(&["*.md", "!README.md"], "README.md", false); // negated
+    assert_glob_match(&["*.md", "!README.md"], "docs/hello.md", false); // not at root
+    assert_glob_match(&["*.md", "!README.md"], "docs/README.md", false); // not at root
+    assert_glob_match(&["*.md", "!README.md"], "file.txt", false); // wrong extension
+}
+
 fn assert_glob_match(pattern: &str, path: &str, expected: bool) {
     let matches = match_pattern(pattern, path);
 
