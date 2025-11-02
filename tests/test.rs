@@ -7,6 +7,17 @@ fn test_basic_wildcards() {
     assert_glob_match("*", "docs/file.txt", false);
 }
 
+#[test]
+fn test_question_mark_wildcard() {
+    // Test *.jsx? pattern - matches zero or one 'x'
+    assert_glob_match("*.jsx?", "page.js", true); // matches - 'x' appears zero times
+    assert_glob_match("*.jsx?", "page.jsx", true); // matches - 'x' appears one time
+    assert_glob_match("*.jsx?", "page.jsxx", false); // doesn't match - 'x' appears more than once
+    assert_glob_match("*.jsx?", "page.ts", false); // doesn't match - doesn't end with js/jsx
+    assert_glob_match("*.jsx?", "component.js", true);
+    assert_glob_match("*.jsx?", "component.jsx", true);
+}
+
 fn assert_glob_match(pattern: &str, path: &str, expected: bool) {
     let matches = match_pattern(pattern, path);
 
