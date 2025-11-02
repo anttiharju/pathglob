@@ -146,6 +146,21 @@ fn test_post_suffix_pattern() {
     assert_glob_match("**/*-post.md", "posts/readme.md", false); // doesn't end with -post.md
 }
 
+#[test]
+fn test_migrate_prefix_pattern() {
+    // Test **/migrate-*.sql pattern - matches files with prefix migrate- and suffix .sql anywhere in the repository
+    assert_glob_match("**/migrate-*.sql", "migrate-10909.sql", true);
+    assert_glob_match("**/migrate-*.sql", "db/migrate-v1.0.sql", true);
+    assert_glob_match("**/migrate-*.sql", "db/sept/migrate-v1.sql", true);
+    assert_glob_match("**/migrate-*.sql", "project/migrations/migrate-001.sql", true);
+    assert_glob_match("**/migrate-*.sql", "migrate-initial.sql", true);
+    assert_glob_match("**/migrate-*.sql", "migrate-.sql", true); // empty middle part is valid
+    assert_glob_match("**/migrate-*.sql", "migration-v1.sql", false); // wrong prefix
+    assert_glob_match("**/migrate-*.sql", "migrate-v1.txt", false); // wrong extension
+    assert_glob_match("**/migrate-*.sql", "migrate.sql", false); // missing dash after migrate
+    assert_glob_match("**/migrate-*.sql", "db/migrate-v1.sql.backup", false); // extra suffix after .sql
+}
+
 fn assert_glob_match(pattern: &str, path: &str, expected: bool) {
     let matches = match_pattern(pattern, path);
 
