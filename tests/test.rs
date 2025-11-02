@@ -28,6 +28,17 @@ fn test_double_star_wildcard() {
     assert_glob_match("**", "", true); // matches empty path
 }
 
+#[test]
+fn test_js_extension_pattern() {
+    // Test *.js pattern - matches all .js files at the root of the repository
+    assert_glob_match("*.js", "app.js", true);
+    assert_glob_match("*.js", "index.js", true);
+    assert_glob_match("*.js", "main.js", true);
+    assert_glob_match("*.js", "component.jsx", false); // wrong extension
+    assert_glob_match("*.js", "src/app.js", false); // not at root (contains slash)
+    assert_glob_match("*.js", "docs/script.js", false); // not at root (contains slash)
+}
+
 fn assert_glob_match(pattern: &str, path: &str, expected: bool) {
     let matches = match_pattern(pattern, path);
 
