@@ -4,4 +4,12 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.84.1"
 
+[lib]
+name = "glob_workflow_paths"
+path = "src/lib.rs"
+
+[[bin]]
+name = "glob-workflow-paths"
+path = "src/main.rs"
+
 [dependencies]
