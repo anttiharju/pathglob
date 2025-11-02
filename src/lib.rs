@@ -14,12 +14,11 @@ pub fn match_pattern(patterns: &[&str], paths: &[&str]) -> bool {
 
     // Fast path: no negations
     if negative_patterns.is_empty() {
+        let parsed_positive: Vec<Pattern> = positive_patterns.iter().map(|p| parse_pattern(p)).collect();
+
         return paths.iter().any(|path| {
             let path_segments = if path.is_empty() { vec![] } else { path.split('/').collect() };
-            positive_patterns.iter().any(|pattern| {
-                let parsed_pattern = parse_pattern(pattern);
-                match_segments(&parsed_pattern.segments, &path_segments, 0, 0)
-            })
+            parsed_positive.iter().any(|pattern| match_segments(&pattern.segments, &path_segments, 0, 0))
         });
     }
 
