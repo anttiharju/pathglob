@@ -39,6 +39,18 @@ fn test_js_extension_pattern() {
     assert_glob_match("*.js", "docs/script.js", false); // not at root (contains slash)
 }
 
+#[test]
+fn test_double_star_js_extension_pattern() {
+    // Test **.js pattern - matches all .js files in the repository
+    assert_glob_match("**.js", "index.js", true);
+    assert_glob_match("**.js", "js/index.js", true);
+    assert_glob_match("**.js", "src/js/app.js", true);
+    assert_glob_match("**.js", "deeply/nested/path/to/file.js", true);
+    assert_glob_match("**.js", "component.jsx", false); // wrong extension
+    assert_glob_match("**.js", "app.ts", false); // wrong extension
+    assert_glob_match("**.js", "script.js.backup", false); // doesn't end with .js
+}
+
 fn assert_glob_match(pattern: &str, path: &str, expected: bool) {
     let matches = match_pattern(pattern, path);
 
