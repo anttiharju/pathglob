@@ -1,8 +1,9 @@
-pub fn match_pattern(patterns: &[&str], path: &str) -> bool {
+pub fn match_pattern(patterns: &[&str], paths: &[&str]) -> bool {
     if patterns.is_empty() {
         return false;
     }
 
+    let path = paths[0];
     let path_segments = if path.is_empty() { vec![] } else { path.split('/').collect() };
 
     // Check if there are any negation patterns
