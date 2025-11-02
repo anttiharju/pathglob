@@ -45,10 +45,10 @@ struct Pattern {
 #[derive(Debug, Clone)]
 enum Segment {
     Literal(String),              // "docs", "file.txt"
-    Star(String),                 // "*.js" -> Star(".js")
+    Star(String),                 // "*.js" -> Star("*.js")
     DoubleStar,                   // "**"
     DoubleStarWithSuffix(String), // "**.js" -> DoubleStarWithSuffix(".js")
-    Optional(String, char),       // "*.jsx?" -> Optional(".js", 'x')
+    Optional(String),             // "*.jsx?" -> Optional("*.jsx?")
 }
 
 fn parse_pattern(pattern: &str) -> Pattern {
@@ -62,22 +62,9 @@ fn parse_pattern(pattern: &str) -> Pattern {
             // Handle **.js patterns
             let suffix = &part[2..];
             segments.push(Segment::DoubleStarWithSuffix(suffix.to_string()));
-        } else if part.contains('*') && part.contains('?') {
-            // Handle patterns like *.jsx?
-            if let Some(question_pos) = part.rfind('?') {
-                if question_pos > 0 {
-                    let before_question = &part[..question_pos];
-                    let optional_char = part.chars().nth(question_pos - 1).unwrap();
-                    let without_optional =
-                        format!("{}{}", &before_question[..before_question.len() - 1], &part[question_pos + 1..]);
-                    segments.push(Segment::Optional(without_optional, optional_char));
-                } else {
-                    // Fallback to star pattern
-                    segments.push(Segment::Star(part.to_string()));
-                }
-            } else {
-                segments.push(Segment::Star(part.to_string()));
-            }
+        } else if part.contains('?') {
+            // Handle patterns like *.jsx? or file?.txt
+            segments.push(Segment::Optional(part.to_string()));
         } else if part.contains('*') {
             segments.push(Segment::Star(part.to_string()));
         } else {
@@ -147,23 +134,17 @@ fn match_segments(segments: &[Segment], path_parts: &[&str], seg_idx: usize, pat
             false
         }
 
-        Segment::Optional(base_pattern, optional_char) => {
+        Segment::Optional(pattern) => {
             if path_idx >= path_parts.len() {
                 return false;
             }
 
-            // Try with the optional character (e.g., "*.jsx" for "*.jsx?")
-            let with_optional = format!("{}{}", &base_pattern[..base_pattern.len()], optional_char);
-            if matches_star_pattern(&with_optional, path_parts[path_idx]) {
-                return match_segments(segments, path_parts, seg_idx + 1, path_idx + 1);
+            // Handle ? by trying both with and without the optional character
+            if matches_optional_pattern(pattern, path_parts[path_idx]) {
+                match_segments(segments, path_parts, seg_idx + 1, path_idx + 1)
+            } else {
+                false
             }
-
-            // Try without the optional character (e.g., "*.js" for "*.jsx?")
-            if matches_star_pattern(base_pattern, path_parts[path_idx]) {
-                return match_segments(segments, path_parts, seg_idx + 1, path_idx + 1);
-            }
-
-            false
         }
     }
 }
@@ -189,5 +170,34 @@ fn matches_star_pattern(pattern: &str, segment: &str) -> bool {
         // For now, implement simple case
         // TODO: Handle patterns like "*foo*bar*"
         true
+    }
+}
+
+fn matches_optional_pattern(pattern: &str, segment: &str) -> bool {
+    if let Some(question_pos) = pattern.find('?') {
+        if question_pos == 0 {
+            return false; // ? at start doesn't make sense
+        }
+
+        let optional_char = pattern.chars().nth(question_pos - 1).unwrap();
+        let before_optional = &pattern[..question_pos - 1];
+        let after_optional = &pattern[question_pos + 1..];
+
+        // Try without the optional character
+        let pattern_without = format!("{}{}", before_optional, after_optional);
+        if matches_star_pattern(&pattern_without, segment) {
+            return true;
+        }
+
+        // Try with the optional character
+        let pattern_with = format!("{}{}{}", before_optional, optional_char, after_optional);
+        if matches_star_pattern(&pattern_with, segment) {
+            return true;
+        }
+
+        false
+    } else {
+        // No ? in pattern, treat as regular star pattern
+        matches_star_pattern(pattern, segment)
     }
 }
