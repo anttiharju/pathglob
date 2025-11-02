@@ -3,18 +3,8 @@ pub fn match_paths(patterns: &[&str], paths: &[&str]) -> bool {
         return false;
     }
 
-    // Pre-parse all patterns once, maintaining order
-    let parsed_patterns: Vec<(Pattern, bool)> = patterns
-        .iter()
-        .map(|pattern| {
-            if pattern.starts_with('!') {
-                let negated_pattern = &pattern[1..];
-                (parse_pattern(negated_pattern), true) // true = is_negation
-            } else {
-                (parse_pattern(pattern), false) // false = is_positive
-            }
-        })
-        .collect();
+    // Pre-parse all patterns, expanding optionals into multiple variants
+    let parsed_patterns: Vec<(Pattern, bool)> = patterns.iter().flat_map(|pattern| parse_pattern(pattern)).collect();
 
     // Check if any path matches the sequential pattern logic
     paths.iter().any(|path| {
@@ -48,31 +38,59 @@ enum Segment {
     Star(String),                 // "*.js" -> Star("*.js")
     DoubleStar,                   // "**"
     DoubleStarWithSuffix(String), // "**.js" -> DoubleStarWithSuffix(".js")
-    Optional(String),             // "*.jsx?" -> Optional("*.jsx?")
 }
 
-fn parse_pattern(pattern: &str) -> Pattern {
-    let parts: Vec<&str> = pattern.split('/').collect();
-    let mut segments = Vec::new();
+fn parse_pattern(pattern: &str) -> Vec<(Pattern, bool)> {
+    let (actual_pattern, is_negation) = if pattern.starts_with('!') { (&pattern[1..], true) } else { (pattern, false) };
 
-    for part in parts {
-        if part == "**" {
-            segments.push(Segment::DoubleStar);
-        } else if part.starts_with("**") {
-            // Handle **.js patterns
-            let suffix = &part[2..];
-            segments.push(Segment::DoubleStarWithSuffix(suffix.to_string()));
-        } else if part.contains('?') {
-            // Handle patterns like *.jsx? or file?.txt
-            segments.push(Segment::Optional(part.to_string()));
-        } else if part.contains('*') {
-            segments.push(Segment::Star(part.to_string()));
-        } else {
-            segments.push(Segment::Literal(part.to_string()));
+    // Expand optionals into multiple patterns
+    expand_optionals(actual_pattern)
+        .into_iter()
+        .map(|expanded_pattern| {
+            let parts: Vec<&str> = expanded_pattern.split('/').collect();
+            let mut segments = Vec::new();
+
+            for part in parts {
+                if part == "**" {
+                    segments.push(Segment::DoubleStar);
+                } else if part.starts_with("**") {
+                    let suffix = &part[2..];
+                    segments.push(Segment::DoubleStarWithSuffix(suffix.to_string()));
+                } else if part.contains('*') {
+                    segments.push(Segment::Star(part.to_string()));
+                } else {
+                    segments.push(Segment::Literal(part.to_string()));
+                }
+            }
+
+            (Pattern { segments }, is_negation)
+        })
+        .collect()
+}
+
+fn expand_optionals(pattern: &str) -> Vec<String> {
+    if let Some(question_pos) = pattern.find('?') {
+        if question_pos == 0 {
+            return vec![pattern.to_string()]; // Invalid pattern, return as-is
         }
-    }
 
-    Pattern { segments }
+        let optional_char = pattern.chars().nth(question_pos - 1).unwrap();
+        let before_optional = &pattern[..question_pos - 1];
+        let after_optional = &pattern[question_pos + 1..];
+
+        // Create two variants: without and with the optional character
+        let pattern_without = format!("{}{}", before_optional, after_optional);
+        let pattern_with = format!("{}{}{}", before_optional, optional_char, after_optional);
+
+        // Recursively expand any remaining optionals in both variants
+        let mut results = Vec::new();
+        results.extend(expand_optionals(&pattern_without));
+        results.extend(expand_optionals(&pattern_with));
+        results
+    } else {
+        // No more optionals, return the pattern as-is
+        vec![pattern.to_string()]
+    }
 }
 
 fn match_segments(segments: &[Segment], path_parts: &[&str], seg_idx: usize, path_idx: usize) -> bool {
@@ -133,19 +151,6 @@ fn match_segments(segments: &[Segment], path_parts: &[&str], seg_idx: usize, pat
             }
             false
         }
-
-        Segment::Optional(pattern) => {
-            if path_idx >= path_parts.len() {
-                return false;
-            }
-
-            // Handle ? by trying both with and without the optional character
-            if matches_optional_pattern(pattern, path_parts[path_idx]) {
-                match_segments(segments, path_parts, seg_idx + 1, path_idx + 1)
-            } else {
-                false
-            }
-        }
     }
 }
 
@@ -170,34 +175,5 @@ fn matches_star_pattern(pattern: &str, segment: &str) -> bool {
         // For now, implement simple case
         // TODO: Handle patterns like "*foo*bar*"
         true
-    }
-}
-
-fn matches_optional_pattern(pattern: &str, segment: &str) -> bool {
-    if let Some(question_pos) = pattern.find('?') {
-        if question_pos == 0 {
-            return false; // ? at start doesn't make sense
-        }
-
-        let optional_char = pattern.chars().nth(question_pos - 1).unwrap();
-        let before_optional = &pattern[..question_pos - 1];
-        let after_optional = &pattern[question_pos + 1..];
-
-        // Try without the optional character
-        let pattern_without = format!("{}{}", before_optional, after_optional);
-        if matches_star_pattern(&pattern_without, segment) {
-            return true;
-        }
-
-        // Try with the optional character
-        let pattern_with = format!("{}{}{}", before_optional, optional_char, after_optional);
-        if matches_star_pattern(&pattern_with, segment) {
-            return true;
-        }
-
-        false
-    } else {
-        // No ? in pattern, treat as regular star pattern
-        matches_star_pattern(pattern, segment)
     }
 }
