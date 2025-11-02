@@ -139,6 +139,7 @@ fn test_post_suffix_pattern() {
     assert_glob_match("**/*-post.md", "blog/first-post.md", true);
     assert_glob_match("**/*-post.md", "docs/welcome-post.md", true);
     assert_glob_match("**/*-post.md", "nested/path/to/final-post.md", true);
+    assert_glob_match("**/*-post.md", "-post.md", true);
     assert_glob_match("**/*-post.md", "post.md", false); // doesn't have the "-" prefix
     assert_glob_match("**/*-post.md", "my-post.txt", false); // wrong extension
     assert_glob_match("**/*-post.md", "my-post-draft.md", false); // has extra suffix after -post
