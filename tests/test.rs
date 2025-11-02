@@ -102,6 +102,20 @@ fn test_nested_docs_pattern() {
     assert_glob_match("**/docs/**", "docs-backup/file.txt", false); // not exactly "docs"
 }
 
+#[test]
+fn test_readme_anywhere_pattern() {
+    // Test **/README.md pattern - matches README.md file anywhere in the repository
+    assert_glob_match("**/README.md", "README.md", true);
+    assert_glob_match("**/README.md", "js/README.md", true);
+    assert_glob_match("**/README.md", "docs/README.md", true);
+    assert_glob_match("**/README.md", "src/components/README.md", true);
+    assert_glob_match("**/README.md", "deeply/nested/path/README.md", true);
+    assert_glob_match("**/README.md", "readme.md", false); // case sensitive
+    assert_glob_match("**/README.md", "README.txt", false); // wrong extension
+    assert_glob_match("**/README.md", "MY-README.md", false); // different filename
+    assert_glob_match("**/README.md", "docs/readme/file.md", false); // not the exact filename
+}
+
 fn assert_glob_match(pattern: &str, path: &str, expected: bool) {
     let matches = match_pattern(pattern, path);
 
