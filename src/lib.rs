@@ -3,51 +3,37 @@ pub fn match_paths(patterns: &[&str], paths: &[&str]) -> bool {
         return false;
     }
 
-    // Separate positive and negative patterns
-    let positive_patterns: Vec<&str> = patterns.iter().filter(|p| !p.starts_with('!')).copied().collect();
-
-    let negative_patterns: Vec<&str> = patterns
+    // Pre-parse all patterns once, maintaining order
+    let parsed_patterns: Vec<(Pattern, bool)> = patterns
         .iter()
-        .filter(|p| p.starts_with('!'))
-        .map(|p| &p[1..]) // Remove the '!' prefix
+        .map(|pattern| {
+            if pattern.starts_with('!') {
+                let negated_pattern = &pattern[1..];
+                (parse_pattern(negated_pattern), true) // true = is_negation
+            } else {
+                (parse_pattern(pattern), false) // false = is_positive
+            }
+        })
         .collect();
 
-    // Early exit: only negation patterns (not valid GitHub Actions usage, but handle gracefully)
-    if positive_patterns.is_empty() {
-        return false;
-    }
-
-    // Fast path: no negations
-    if negative_patterns.is_empty() {
-        let parsed_positive: Vec<Pattern> = positive_patterns.iter().map(|p| parse_pattern(p)).collect();
-
-        return paths.iter().any(|path| {
-            let path_segments = if path.is_empty() { vec![] } else { path.split('/').collect() };
-            parsed_positive.iter().any(|pattern| match_segments(&pattern.segments, &path_segments, 0, 0))
-        });
-    }
-
-    // Slow path: with negations - pre-parse all patterns
-    let parsed_positive: Vec<Pattern> = positive_patterns.iter().map(|p| parse_pattern(p)).collect();
-    let parsed_negative: Vec<Pattern> = negative_patterns.iter().map(|p| parse_pattern(p)).collect();
-
+    // Check if any path matches the sequential pattern logic
     paths.iter().any(|path| {
         let path_segments = if path.is_empty() { vec![] } else { path.split('/').collect() };
 
-        // Check if any positive pattern matches
-        let has_positive_match =
-            parsed_positive.iter().any(|pattern| match_segments(&pattern.segments, &path_segments, 0, 0));
+        // Process pre-parsed patterns sequentially - each pattern can override previous results
+        let mut matched = false;
 
-        if !has_positive_match {
-            return false;
+        for (parsed_pattern, is_negation) in &parsed_patterns {
+            if match_segments(&parsed_pattern.segments, &path_segments, 0, 0) {
+                if *is_negation {
+                    matched = false; // Negation pattern matched - exclude the path
+                } else {
+                    matched = true; // Positive pattern matched - include the path
+                }
+            }
         }
 
-        // Check if any negative pattern matches (excludes the path)
-        let has_negative_match =
-            parsed_negative.iter().any(|pattern| match_segments(&pattern.segments, &path_segments, 0, 0));
-
-        // Include path only if it has positive match AND no negative match
-        !has_negative_match
+        matched
     })
 }
 
