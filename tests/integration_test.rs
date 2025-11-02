@@ -1,10 +1,18 @@
-// This file contains integration tests for the glob-workflow-paths library.
-// Add your tests below to ensure the public API behaves as expected.
+use glob_workflow_paths::match_pattern;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_example_functionality() {
-        // Add your test cases here
-    }
+#[test]
+fn test_basic_wildcards() {
+    assert_glob_match("*", "README.md", true);
+    assert_glob_match("*", "server.rb", true);
+    assert_glob_match("*", "docs/file.txt", false);
+}
+
+fn assert_glob_match(pattern: &str, path: &str, expected: bool) {
+    let matches = match_pattern(pattern, path);
+
+    assert_eq!(
+        matches, expected,
+        "Pattern '{}' vs '{}' -> {} (expected {})",
+        pattern, path, matches, expected
+    );
 }
