@@ -1,48 +1,66 @@
 pub fn match_pattern(patterns: &[&str], paths: &[&str]) -> bool {
-    if patterns.is_empty() {
+    if patterns.is_empty() || paths.is_empty() {
         return false;
     }
-
-    let path = paths[0];
-    let path_segments = if path.is_empty() { vec![] } else { path.split('/').collect() };
 
     // Check if there are any negation patterns
     let has_negations = patterns.iter().any(|p| p.starts_with('!'));
 
     if !has_negations {
-        // Fast path: no negations, return true if ANY pattern matches
-        for pattern in patterns {
-            let parsed_pattern = parse_pattern(pattern);
-            if match_segments(&parsed_pattern.segments, &path_segments, 0, 0) {
-                return true;
+        // Fast path: no negations, return true if ANY pattern matches ANY path
+        for path in paths {
+            let path_segments = if path.is_empty() { vec![] } else { path.split('/').collect() };
+            for pattern in patterns {
+                let parsed_pattern = parse_pattern(pattern);
+                if match_segments(&parsed_pattern.segments, &path_segments, 0, 0) {
+                    return true;
+                }
             }
         }
         return false;
     }
 
-    // Slow path: has negations, need to check all patterns
-    let mut matched = false;
+    // Slow path: has negations, need to check all patterns for each path
+    for path in paths {
+        let path_segments = if path.is_empty() { vec![] } else { path.split('/').collect() };
+        let mut matched = false;
 
-    for pattern in patterns {
-        if pattern.starts_with('!') {
-            // Negation pattern
-            let negated_pattern = &pattern[1..];
-            let parsed_pattern = parse_pattern(negated_pattern);
-            if match_segments(&parsed_pattern.segments, &path_segments, 0, 0) {
-                // If path matches a negation pattern, it's excluded
-                return false;
+        // Check positive patterns first
+        for pattern in patterns {
+            if !pattern.starts_with('!') {
+                let parsed_pattern = parse_pattern(pattern);
+                if match_segments(&parsed_pattern.segments, &path_segments, 0, 0) {
+                    matched = true;
+                    break; // Found a positive match for this path
+                }
             }
-        } else {
-            // Positive pattern
-            let parsed_pattern = parse_pattern(pattern);
-            if match_segments(&parsed_pattern.segments, &path_segments, 0, 0) {
-                matched = true;
-                // Don't return immediately - continue checking for negation patterns
+        }
+
+        // If no positive match, continue to next path
+        if !matched {
+            continue;
+        }
+
+        // Check negation patterns
+        let mut excluded = false;
+        for pattern in patterns {
+            if pattern.starts_with('!') {
+                let negated_pattern = &pattern[1..];
+                let parsed_pattern = parse_pattern(negated_pattern);
+                if match_segments(&parsed_pattern.segments, &path_segments, 0, 0) {
+                    excluded = true;
+                    break; // This path is excluded
+                }
             }
+        }
+
+        // If this path matched and wasn't excluded, return true
+        if !excluded {
+            return true;
         }
     }
 
-    matched
+    false // No paths matched or all matched paths were excluded
 }
 
 #[derive(Debug, Clone)]
