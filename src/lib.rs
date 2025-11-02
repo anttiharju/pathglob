@@ -25,6 +25,7 @@ fn tokenize_pattern(pattern: &str) -> Vec<Token> {
         match chars[i] {
             '*' => {
                 if i + 1 < chars.len() && chars[i + 1] == '*' {
+                    // Don't check for **/* pattern here - just create DoubleStar
                     tokens.push(Token::DoubleStar);
                     i += 2;
                 } else {
@@ -68,7 +69,7 @@ fn match_tokens(tokens: &[Token], path: Vec<char>, path_idx: usize) -> bool {
             match_tokens(&tokens[1..], path, path_idx + 1)
         }
         Token::Star => {
-            // Try matching zero characters
+            // Try matching zero characters first
             if match_tokens(&tokens[1..], path.clone(), path_idx) {
                 return true;
             }
@@ -84,18 +85,39 @@ fn match_tokens(tokens: &[Token], path: Vec<char>, path_idx: usize) -> bool {
             false
         }
         Token::DoubleStar => {
-            // Try matching zero characters
-            if match_tokens(&tokens[1..], path.clone(), path_idx) {
-                return true;
-            }
-
-            // Try matching one or more characters (including '/')
-            for i in (path_idx + 1)..=path.len() {
-                if match_tokens(&tokens[1..], path.clone(), i) {
+            // Handle ** followed by / specially
+            if tokens.len() > 1 && matches!(tokens[1], Token::Literal('/')) {
+                // This is **/ pattern
+                // Try matching zero directories (stay at current position and skip **/)
+                if match_tokens(&tokens[2..], path.clone(), path_idx) {
                     return true;
                 }
+
+                // Try matching one or more path segments
+                for i in path_idx..path.len() {
+                    if path[i] == '/' {
+                        // Found a slash, try matching from the position after it
+                        if match_tokens(&tokens[2..], path.clone(), i + 1) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            } else {
+                // Regular ** without following /
+                // Try zero-length match first
+                if match_tokens(&tokens[1..], path.clone(), path_idx) {
+                    return true;
+                }
+
+                // Try consuming characters one by one
+                for i in (path_idx + 1)..=path.len() {
+                    if match_tokens(&tokens[1..], path.clone(), i) {
+                        return true;
+                    }
+                }
+                false
             }
-            false
         }
         Token::Optional(c) => {
             // Try zero occurrences
