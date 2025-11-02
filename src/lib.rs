@@ -1,136 +1,175 @@
 pub fn match_pattern(pattern: &str, path: &str) -> bool {
-    match_single_pattern(pattern, path)
-}
+    let parsed_pattern = parse_pattern(pattern);
+    let path_segments = if path.is_empty() {
+        vec![]
+    } else {
+        path.split('/').collect()
+    };
 
-fn match_single_pattern(pattern: &str, path: &str) -> bool {
-    // Convert pattern to regex-like tokens for easier processing
-    let tokens = tokenize_pattern(pattern);
-    match_tokens(&tokens, path.chars().collect(), 0)
+    match_segments(&parsed_pattern.segments, &path_segments, 0, 0)
 }
 
 #[derive(Debug, Clone)]
-enum Token {
-    Literal(char),
-    Star,           // * - matches any chars except /
-    DoubleStar,     // ** - matches any chars including /
-    Optional(char), // x? - matches zero or one x
+struct Pattern {
+    segments: Vec<Segment>,
 }
 
-fn tokenize_pattern(pattern: &str) -> Vec<Token> {
-    let mut tokens = Vec::new();
-    let chars: Vec<char> = pattern.chars().collect();
-    let mut i = 0;
+#[derive(Debug, Clone)]
+enum Segment {
+    Literal(String),              // "docs", "file.txt"
+    Star(String),                 // "*.js" -> Star(".js")
+    DoubleStar,                   // "**"
+    DoubleStarWithSuffix(String), // "**.js" -> DoubleStarWithSuffix(".js")
+    Optional(String, char),       // "*.jsx?" -> Optional(".js", 'x')
+}
 
-    while i < chars.len() {
-        match chars[i] {
-            '*' => {
-                if i + 1 < chars.len() && chars[i + 1] == '*' {
-                    // Don't check for **/* pattern here - just create DoubleStar
-                    tokens.push(Token::DoubleStar);
-                    i += 2;
+fn parse_pattern(pattern: &str) -> Pattern {
+    let parts: Vec<&str> = pattern.split('/').collect();
+    let mut segments = Vec::new();
+
+    for part in parts {
+        if part == "**" {
+            segments.push(Segment::DoubleStar);
+        } else if part.starts_with("**") {
+            // Handle **.js patterns
+            let suffix = &part[2..];
+            segments.push(Segment::DoubleStarWithSuffix(suffix.to_string()));
+        } else if part.contains('*') && part.contains('?') {
+            // Handle patterns like *.jsx?
+            if let Some(question_pos) = part.rfind('?') {
+                if question_pos > 0 {
+                    let before_question = &part[..question_pos];
+                    let optional_char = part.chars().nth(question_pos - 1).unwrap();
+                    let without_optional = format!(
+                        "{}{}",
+                        &before_question[..before_question.len() - 1],
+                        &part[question_pos + 1..]
+                    );
+                    segments.push(Segment::Optional(without_optional, optional_char));
                 } else {
-                    tokens.push(Token::Star);
-                    i += 1;
+                    // Fallback to star pattern
+                    segments.push(Segment::Star(part.to_string()));
                 }
+            } else {
+                segments.push(Segment::Star(part.to_string()));
             }
-            '?' => {
-                if i > 0 {
-                    // Convert previous literal + ? into Optional
-                    if let Some(Token::Literal(c)) = tokens.pop() {
-                        tokens.push(Token::Optional(c));
-                    }
-                }
-                i += 1;
-            }
-            c => {
-                tokens.push(Token::Literal(c));
-                i += 1;
-            }
+        } else if part.contains('*') {
+            segments.push(Segment::Star(part.to_string()));
+        } else {
+            segments.push(Segment::Literal(part.to_string()));
         }
     }
 
-    tokens
+    Pattern { segments }
 }
 
-fn match_tokens(tokens: &[Token], path: Vec<char>, path_idx: usize) -> bool {
-    if tokens.is_empty() && path_idx >= path.len() {
+fn match_segments(
+    segments: &[Segment],
+    path_parts: &[&str],
+    seg_idx: usize,
+    path_idx: usize,
+) -> bool {
+    // Base case: both exhausted
+    if seg_idx >= segments.len() && path_idx >= path_parts.len() {
         return true;
     }
 
-    if tokens.is_empty() {
+    // Pattern exhausted but path remains
+    if seg_idx >= segments.len() {
         return false;
     }
 
-    match &tokens[0] {
-        Token::Literal(c) => {
-            if path_idx >= path.len() || path[path_idx] != *c {
+    match &segments[seg_idx] {
+        Segment::Literal(literal) => {
+            if path_idx >= path_parts.len() || path_parts[path_idx] != literal {
                 return false;
             }
-            match_tokens(&tokens[1..], path, path_idx + 1)
+            match_segments(segments, path_parts, seg_idx + 1, path_idx + 1)
         }
-        Token::Star => {
-            // Try matching zero characters first
-            if match_tokens(&tokens[1..], path.clone(), path_idx) {
+
+        Segment::Star(pattern) => {
+            if path_idx >= path_parts.len() {
+                return false;
+            }
+
+            if matches_star_pattern(pattern, path_parts[path_idx]) {
+                match_segments(segments, path_parts, seg_idx + 1, path_idx + 1)
+            } else {
+                false
+            }
+        }
+
+        Segment::DoubleStar => {
+            // Try consuming 0 or more path segments
+            // First try consuming 0 segments
+            if match_segments(segments, path_parts, seg_idx + 1, path_idx) {
                 return true;
             }
 
-            // Try matching one or more characters (but not '/')
-            let mut i = path_idx;
-            while i < path.len() && path[i] != '/' {
-                i += 1;
-                if match_tokens(&tokens[1..], path.clone(), i) {
+            // Then try consuming 1, 2, 3... segments
+            for i in (path_idx + 1)..=path_parts.len() {
+                if match_segments(segments, path_parts, seg_idx + 1, i) {
                     return true;
                 }
             }
             false
         }
-        Token::DoubleStar => {
-            // Handle ** followed by / specially
-            if tokens.len() > 1 && matches!(tokens[1], Token::Literal('/')) {
-                // This is **/ pattern
-                // Try matching zero directories (stay at current position and skip **/)
-                if match_tokens(&tokens[2..], path.clone(), path_idx) {
-                    return true;
-                }
 
-                // Try matching one or more path segments
-                for i in path_idx..path.len() {
-                    if path[i] == '/' {
-                        // Found a slash, try matching from the position after it
-                        if match_tokens(&tokens[2..], path.clone(), i + 1) {
-                            return true;
-                        }
-                    }
-                }
-                false
-            } else {
-                // Regular ** without following /
-                // Try zero-length match first
-                if match_tokens(&tokens[1..], path.clone(), path_idx) {
-                    return true;
-                }
-
-                // Try consuming characters one by one
-                for i in (path_idx + 1)..=path.len() {
-                    if match_tokens(&tokens[1..], path.clone(), i) {
+        Segment::DoubleStarWithSuffix(suffix) => {
+            // **.js matches any file ending with .js anywhere in the repository
+            for i in path_idx..path_parts.len() {
+                if path_parts[i].ends_with(suffix) {
+                    if match_segments(segments, path_parts, seg_idx + 1, i + 1) {
                         return true;
                     }
                 }
-                false
             }
+            false
         }
-        Token::Optional(c) => {
-            // Try zero occurrences
-            if match_tokens(&tokens[1..], path.clone(), path_idx) {
-                return true;
+
+        Segment::Optional(base_pattern, optional_char) => {
+            if path_idx >= path_parts.len() {
+                return false;
             }
 
-            // Try one occurrence
-            if path_idx < path.len() && path[path_idx] == *c {
-                return match_tokens(&tokens[1..], path, path_idx + 1);
+            // Try with the optional character (e.g., "*.jsx" for "*.jsx?")
+            let with_optional = format!("{}{}", &base_pattern[..base_pattern.len()], optional_char);
+            if matches_star_pattern(&with_optional, path_parts[path_idx]) {
+                return match_segments(segments, path_parts, seg_idx + 1, path_idx + 1);
+            }
+
+            // Try without the optional character (e.g., "*.js" for "*.jsx?")
+            if matches_star_pattern(base_pattern, path_parts[path_idx]) {
+                return match_segments(segments, path_parts, seg_idx + 1, path_idx + 1);
             }
 
             false
         }
+    }
+}
+
+fn matches_star_pattern(pattern: &str, segment: &str) -> bool {
+    if !pattern.contains('*') {
+        return pattern == segment;
+    }
+
+    // Handle patterns like "*.js", "*README*", etc.
+    let parts: Vec<&str> = pattern.split('*').collect();
+
+    if parts.len() == 2 {
+        let prefix = parts[0];
+        let suffix = parts[1];
+
+        segment.starts_with(prefix)
+            && segment.ends_with(suffix)
+            && segment.len() >= prefix.len() + suffix.len()
+    } else if parts.len() == 1 {
+        // Just "*"
+        true
+    } else {
+        // More complex patterns with multiple *
+        // For now, implement simple case
+        // TODO: Handle patterns like "*foo*bar*"
+        true
     }
 }
