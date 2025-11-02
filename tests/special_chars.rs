@@ -28,3 +28,16 @@ fn test_double_star_behavior() {
     assert_glob_match(&["*"], &["dir/file.txt"], false); // single * cannot match /
     assert_glob_match(&["**"], &["dir/file.txt"], true); // double ** can match /
 }
+
+#[test]
+fn test_question_mark_behavior() {
+    // Matches zero or one of the preceding character
+    assert_glob_match(&["*.jsx?"], &["component.js"], true); // zero 'x'
+    assert_glob_match(&["*.jsx?"], &["component.jsx"], true); // one 'x'
+    assert_glob_match(&["*.jsx?"], &["component.jsxx"], false); // more than one 'x'
+
+    // Works with other characters too
+    assert_glob_match(&["file?.txt"], &["fil.txt"], true); // zero e characters
+    assert_glob_match(&["file?.txt"], &["file.txt"], true); // one e character
+    assert_glob_match(&["file?.txt"], &["filee.txt"], false); // two e
+}
