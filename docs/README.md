@@ -1,4 +1,4 @@
-# glob-workflow-paths
+# pathglob
 
 Glob library that mimics GitHub Actions behavior.
 
